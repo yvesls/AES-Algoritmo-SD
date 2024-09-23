@@ -2,7 +2,6 @@ package com.aes;
 
 import java.io.*;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
 
 public class AESTCPClient extends Thread {
     private AES128 aes;
@@ -24,7 +23,7 @@ public class AESTCPClient extends Thread {
             System.out.println("Conectado ao servidor.");
 
             String mensagem = "Olá, servidor!";
-            byte[] encryptedMessage = aes.encrypt(aes.pad(mensagem.getBytes(StandardCharsets.UTF_8)));
+            byte[] encryptedMessage = aes.encrypt(mensagem.getBytes());
 
             out.write(encryptedMessage);
             out.flush();

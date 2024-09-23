@@ -3,9 +3,9 @@ package com.aes;
 import java.util.Arrays;
 
 public class AES128 {
-    private static final int Nb = 4;
-    private static final int Nk = 4;
-    private static final int Nr = 10;
+    private static final int Nb = 4; // Número de colunas (32 bits cada) no estado
+    private static final int Nk = 4; // Número de colunas na chave
+    private static final int Nr = 10; // Número de rodadas para AES-128
 
     private byte[] key;
     private byte[][] state;
@@ -18,9 +18,8 @@ public class AES128 {
         this.state = new byte[4][Nb];
     }
 
+    // Criptografa o texto claro
     public byte[] encrypt(byte[] plaintext) {
-        plaintext = addPadding(plaintext);
-
         if (plaintext.length % 16 != 0) {
             plaintext = pad(plaintext);
         }
@@ -52,18 +51,7 @@ public class AES128 {
         return ciphertext;
     }
 
-    byte[] pad(byte[] data) {
-        int paddingLength = 16 - (data.length % 16);
-        byte[] paddedData = new byte[data.length + paddingLength];
-        System.arraycopy(data, 0, paddedData, 0, data.length);
-
-        for (int i = data.length; i < paddedData.length; i++) {
-            paddedData[i] = (byte) paddingLength;
-        }
-
-        return paddedData;
-    }
-
+    // Descriptografa o texto cifrado
     public byte[] decrypt(byte[] ciphertext) {
         if (ciphertext.length % 16 != 0) {
             throw new IllegalArgumentException("O bloco de entrada deve ter 128 bits (16 bytes)");
@@ -93,16 +81,59 @@ public class AES128 {
             plaintext[i] = state[i / 4][i % 4];
         }
 
-        return removePadding(unpad(plaintext));
+        return removePadding(plaintext);
     }
 
-    private byte[] unpad(byte[] data) {
-        int paddingLength = data[data.length - 1];
-        byte[] unpaddedData = new byte[data.length - paddingLength];
-        System.arraycopy(data, 0, unpaddedData, 0, unpaddedData.length);
-        return unpaddedData;
+    private byte[][] keyExpansion(byte[] key) {
+        byte[][] expandedKeys = new byte[4 * (Nr + 1)][4];
+        byte[] temp = new byte[4];
+        int i = 0;
+
+        while (i < Nk) {
+            expandedKeys[i][0] = key[4 * i];
+            expandedKeys[i][1] = key[4 * i + 1];
+            expandedKeys[i][2] = key[4 * i + 2];
+            expandedKeys[i][3] = key[4 * i + 3];
+            i++;
+        }
+
+        i = Nk;
+        while (i < 4 * (Nr + 1)) {
+            temp[0] = expandedKeys[i - 1][0];
+            temp[1] = expandedKeys[i - 1][1];
+            temp[2] = expandedKeys[i - 1][2];
+            temp[3] = expandedKeys[i - 1][3];
+
+            if (i % Nk == 0) {
+                temp = xorWords(rotateWord(temp), subWord(temp));
+                temp[0] = (byte) (temp[0] ^ rCon(i / Nk));
+
+            }
+
+            expandedKeys[i] = xorWords(expandedKeys[i - Nk], temp);
+            i++;
+        }
+
+        return expandedKeys;
     }
 
+    private byte[] xorWords(byte[] word1, byte[] word2) {
+        byte[] result = new byte[word1.length];
+        for (int i = 0; i < word1.length; i++) {
+            result[i] = (byte) (word1[i] ^ word2[i]);
+        }
+        return result;
+    }
+
+    private void subBytes(byte[][] state) {
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < Nb; j++) {
+                state[i][j] = sBoxTransform(state[i][j]);
+            }
+        }
+    }
+
+    // Desfaz a operação SubBytes
     private void invSubBytes(byte[][] state) {
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < Nb; j++) {
@@ -111,12 +142,40 @@ public class AES128 {
         }
     }
 
-    private void invShiftRows(byte[][] state) {
-        state[1] = rightRotate(state[1], 1);
-        state[2] = rightRotate(state[2], 2);
-        state[3] = rightRotate(state[3], 3);
+    // Realiza a operação ShiftRows
+    private void shiftRows(byte[][] state) {
+        for (int i = 1; i < 4; i++) {
+            state[i] = leftRotate(state[i], i);
+        }
     }
 
+    // Desfaz a operação ShiftRows
+    private void invShiftRows(byte[][] state) {
+        for (int i = 1; i < 4; i++) {
+            state[i] = rightRotate(state[i], i);
+        }
+    }
+
+    // Realiza a operação MixColumns
+    private void mixColumns(byte[][] state) {
+        for (int c = 0; c < Nb; c++) {
+            byte[] col = new byte[4];
+            for (int i = 0; i < 4; i++) {
+                col[i] = state[i][c];
+            }
+
+            state[0][c] = (byte) (gfMultiply(col[0], (byte) 0x02) ^ gfMultiply(col[1], (byte) 0x03)
+                    ^ col[2] ^ col[3]);
+            state[1][c] = (byte) (col[0] ^ gfMultiply(col[1], (byte) 0x02)
+                    ^ gfMultiply(col[2], (byte) 0x03) ^ col[3]);
+            state[2][c] = (byte) (col[0] ^ col[1] ^ gfMultiply(col[2], (byte) 0x02)
+                    ^ gfMultiply(col[3], (byte) 0x03));
+            state[3][c] = (byte) (gfMultiply(col[0], (byte) 0x03) ^ col[1] ^ col[2]
+                    ^ gfMultiply(col[3], (byte) 0x02));
+        }
+    }
+
+    // Desfaz a operação MixColumns
     private void invMixColumns(byte[][] state) {
         for (int c = 0; c < Nb; c++) {
             byte[] col = new byte[4];
@@ -133,6 +192,25 @@ public class AES128 {
             state[3][c] = (byte) (gfMultiply(col[0], (byte) 0x0b) ^ gfMultiply(col[1], (byte) 0x0d)
                     ^ gfMultiply(col[2], (byte) 0x09) ^ gfMultiply(col[3], (byte) 0x0e));
         }
+    }
+
+    byte[] pad(byte[] data) {
+        int paddingLength = 16 - (data.length % 16);
+        byte[] paddedData = new byte[data.length + paddingLength];
+        System.arraycopy(data, 0, paddedData, 0, data.length);
+
+        for (int i = data.length; i < paddedData.length; i++) {
+            paddedData[i] = (byte) paddingLength;
+        }
+
+        return paddedData;
+    }
+
+    private byte[] unpad(byte[] data) {
+        int paddingLength = data[data.length - 1];
+        byte[] unpaddedData = new byte[data.length - paddingLength];
+        System.arraycopy(data, 0, unpaddedData, 0, unpaddedData.length);
+        return unpaddedData;
     }
 
     private byte[] rightRotate(byte[] row, int n) {
@@ -181,42 +259,12 @@ public class AES128 {
         return invSBox[in & 0xFF];
     }
 
-    private void subBytes(byte[][] state) {
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < Nb; j++) {
-                state[i][j] = sBoxTransform(state[i][j]);
-            }
-        }
-    }
-
-    private void shiftRows(byte[][] state) {
-        state[1] = leftRotate(state[1], 1);
-
-        state[2] = leftRotate(state[2], 2);
-
-        state[3] = leftRotate(state[3], 3);
-    }
-
     private byte[] leftRotate(byte[] row, int n) {
         byte[] newRow = new byte[row.length];
         for (int i = 0; i < row.length; i++) {
             newRow[i] = row[(i + n) % row.length];
         }
         return newRow;
-    }
-
-    private void mixColumns(byte[][] state) {
-        for (int c = 0; c < Nb; c++) {
-            byte[] col = new byte[4];
-            for (int i = 0; i < 4; i++) {
-                col[i] = state[i][c];
-            }
-
-            state[0][c] = (byte) (gfMultiply(col[0], (byte) 0x02) ^ gfMultiply(col[1], (byte) 0x03) ^ col[2] ^ col[3]);
-            state[1][c] = (byte) (col[0] ^ gfMultiply(col[1], (byte) 0x02) ^ gfMultiply(col[2], (byte) 0x03) ^ col[3]);
-            state[2][c] = (byte) (col[0] ^ col[1] ^ gfMultiply(col[2], (byte) 0x02) ^ gfMultiply(col[3], (byte) 0x03));
-            state[3][c] = (byte) (gfMultiply(col[0], (byte) 0x03) ^ col[1] ^ col[2] ^ gfMultiply(col[3], (byte) 0x02));
-        }
     }
 
     private byte gfMultiply(byte a, byte b) {
@@ -245,35 +293,6 @@ public class AES128 {
                 state[i][j] ^= roundKey[i][j];
             }
         }
-    }
-
-    private byte[][] keyExpansion(byte[] key) {
-        byte[][] expandedKey = new byte[Nb * (Nr + 1)][4];
-
-        for (int i = 0; i < Nk; i++) {
-            for (int j = 0; j < 4; j++) {
-                expandedKey[i][j] = key[4 * i + j];
-            }
-        }
-
-        byte[] temp = new byte[4];
-
-        for (int i = Nk; i < Nb * (Nr + 1); i++) {
-            for (int j = 0; j < 4; j++) {
-                temp[j] = expandedKey[i - 1][j];
-            }
-
-            if (i % Nk == 0) {
-                temp = subWord(rotateWord(temp));
-                temp[0] ^= rCon(i / Nk);
-            }
-
-            for (int j = 0; j < 4; j++) {
-                expandedKey[i][j] = (byte) (expandedKey[i - Nk][j] ^ temp[j]);
-            }
-        }
-
-        return expandedKey;
     }
 
     private byte[] rotateWord(byte[] word) {
