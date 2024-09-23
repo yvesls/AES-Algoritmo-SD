@@ -3,9 +3,9 @@ package com.aes;
 import java.util.Arrays;
 
 public class AES128 {
-    private static final int Nb = 4; // Número de colunas (32 bits cada) no estado
-    private static final int Nk = 4; // Número de colunas na chave
-    private static final int Nr = 10; // Número de rodadas para AES-128
+    private static final int Nb = 4;
+    private static final int Nk = 4;
+    private static final int Nr = 10;
 
     private byte[] key;
     private byte[][] state;
@@ -18,7 +18,6 @@ public class AES128 {
         this.state = new byte[4][Nb];
     }
 
-    // Criptografa o texto claro
     public byte[] encrypt(byte[] plaintext) {
         if (plaintext.length % 16 != 0) {
             plaintext = pad(plaintext);
@@ -51,7 +50,6 @@ public class AES128 {
         return ciphertext;
     }
 
-    // Descriptografa o texto cifrado
     public byte[] decrypt(byte[] ciphertext) {
         if (ciphertext.length % 16 != 0) {
             throw new IllegalArgumentException("O bloco de entrada deve ter 128 bits (16 bytes)");
@@ -133,7 +131,6 @@ public class AES128 {
         }
     }
 
-    // Desfaz a operação SubBytes
     private void invSubBytes(byte[][] state) {
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < Nb; j++) {
@@ -142,14 +139,12 @@ public class AES128 {
         }
     }
 
-    // Realiza a operação ShiftRows
     private void shiftRows(byte[][] state) {
         for (int i = 1; i < 4; i++) {
             state[i] = leftRotate(state[i], i);
         }
     }
 
-    // Desfaz a operação ShiftRows
     private void invShiftRows(byte[][] state) {
         for (int i = 1; i < 4; i++) {
             state[i] = rightRotate(state[i], i);
@@ -175,7 +170,6 @@ public class AES128 {
         }
     }
 
-    // Desfaz a operação MixColumns
     private void invMixColumns(byte[][] state) {
         for (int c = 0; c < Nb; c++) {
             byte[] col = new byte[4];
